@@ -6,7 +6,7 @@ import argparse
 
 # TODO: run this script
 
-START_DATE = pd.to_datetime('2022-02-24')
+START_DATE = pd.to_datetime('2022-05-14')
 END_DATE = pd.to_datetime('2022-06-30')
 RAW_DATA_DIR = '/Volumes/Elements/data/quotes/raw'
 CLEAN_DATA_DIR = '/Volumes/Elements2/data/quotes/clean'
@@ -32,22 +32,14 @@ if __name__ == "__main__":
         'indicators': str,
     }
 
-    parser = argparse.ArgumentParser(description='Onboard Trades')
-    parser.add_argument('--start_date', type=str, )
-    parser.add_argument('--end_date', type=str, )
-    parser.add_argument('--raw_data_dir', type=str, default=RAW_DATA_DIR)
-    parser.add_argument('--clean_data_dir', type=str, default=CLEAN_DATA_DIR)
 
 
-    args = parser.parse_args()
+    date_range = pd.bdate_range(START_DATE, END_DATE)
 
-    date_range = pd.bdate_range(args.start_date, args.end_date)
-    raw_data_dir = args.raw_data_dir
-    clean_data_dir = args.clean_data_dir
 
     for date in tqdm(date_range):
         try:
-            df = pd.read_csv(f"{raw_data_dir}/{date.strftime('%Y%m%d')}.csv.gz")
+            df = pd.read_csv(f"{RAW_DATA_DIR}/{date.strftime('%Y%m%d')}.csv.gz")
 
             df['indicators'] = df['indicators'].fillna(0)
             df['ask_size'] = df['ask_size'].fillna(0)
@@ -55,7 +47,7 @@ if __name__ == "__main__":
 
             df = df.astype(dtypes)
 
-            df.to_parquet(f"{clean_data_dir}/{date.strftime('%Y%m%d')}.parquet")
+            df.to_parquet(f"{CLEAN_DATA_DIR}/{date.strftime('%Y%m%d')}.parquet")
 
         except FileNotFoundError as e:
             print(f"File {date.strftime('%Y%m%d')} not found.")

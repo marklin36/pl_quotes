@@ -54,7 +54,9 @@ if __name__ == "__main__":
             df = (
                 pl.scan_csv(
                     input_path,
-                    infer_schema_length=10000,  # improves inference accuracy
+                    infer_schema_length=0,
+                    ignore_errors=True,
+                    null_values=["", " ", "NA"],
                 )
                 .with_columns([
                     pl.col("indicators").fill_null("0"),
@@ -62,20 +64,17 @@ if __name__ == "__main__":
                     pl.col("bid_size").fill_null(0),
                 ])
                 .with_columns([
-                    pl.col("ticker").cast(pl.Utf8),
-                    pl.col("conditions").cast(pl.Utf8),
-                    pl.col("ask_exchange").cast(pl.Int8),
-                    pl.col("ask_price").cast(pl.Float32),
-                    pl.col("ask_size").cast(pl.Int16),
-                    pl.col("bid_exchange").cast(pl.Int8),
-                    pl.col("bid_price").cast(pl.Float32),
-                    pl.col("bid_size").cast(pl.Int16),
-                    pl.col("participant_timestamp").cast(pl.Int64),
-                    pl.col("sequence_number").cast(pl.Int64),
-                    pl.col("sip_timestamp").cast(pl.Int64),
-                    pl.col("tape").cast(pl.Int8),
-                    pl.col("trf_timestamp").cast(pl.Int64),
-                    pl.col("indicators").cast(pl.Utf8),
+                    pl.col("ask_exchange").cast(pl.Int8, strict=False),
+                    pl.col("ask_price").cast(pl.Float32, strict=False),
+                    pl.col("ask_size").cast(pl.Int16, strict=False),
+                    pl.col("bid_exchange").cast(pl.Int8, strict=False),
+                    pl.col("bid_price").cast(pl.Float32, strict=False),
+                    pl.col("bid_size").cast(pl.Int16, strict=False),
+                    pl.col("participant_timestamp").cast(pl.Int64, strict=False),
+                    pl.col("sequence_number").cast(pl.Int64, strict=False),
+                    pl.col("sip_timestamp").cast(pl.Int64, strict=False),
+                    pl.col("tape").cast(pl.Int8, strict=False),
+                    pl.col("trf_timestamp").cast(pl.Int64, strict=False),
                 ])
             )
 
