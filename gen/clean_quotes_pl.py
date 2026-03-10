@@ -52,7 +52,15 @@ if __name__ == "__main__":
         try:
 
             df = (
-                pl.scan_csv(input_path)
+                pl.scan_csv(
+                    input_path,
+                    infer_schema_length=10000,  # improves inference accuracy
+                )
+                .with_columns([
+                    pl.col("indicators").fill_null("0"),
+                    pl.col("ask_size").fill_null(0),
+                    pl.col("bid_size").fill_null(0),
+                ])
                 .with_columns([
                     pl.col("ticker").cast(pl.Utf8),
                     pl.col("conditions").cast(pl.Utf8),
