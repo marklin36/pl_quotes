@@ -48,6 +48,7 @@ if __name__ == "__main__":
             )
 
             df = df.filter(pl.col('ticker').is_in(tickers))
+            df = df.sort(['ticker', 'participant_timestamp'])
             df.write_parquet(output_path)
         except Exception as e:
             print(f"Error processing {date_str}: {e}")
