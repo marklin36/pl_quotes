@@ -27,7 +27,7 @@ if __name__ == "__main__":
     for date in tqdm(date_range):
 
         date_str = date.strftime("%Y%m%d")
-        input_path = raw_data_dir / f"{date_str}.csv.gz"
+        input_path = raw_data_dir / f"{date_str}.parquet"
         output_path = clean_data_dir / f"{date_str}.parquet"
 
         if not input_path.exists():
@@ -36,8 +36,17 @@ if __name__ == "__main__":
 
         try:
             df = pl.read_parquet(input_path)
-            univ = pd.read_parquet(universe_path)
-            tickers = univ[univ['date'] == date]['ticker'].unique()
+            univ = pl.read_parquet(universe_path)
+
+            tickers = (
+                univ
+                .filter(pl.col("date") == date)
+                .select("ticker")
+                .unique()
+                .to_series()
+                .implode()
+            )
+
             df = df.filter(pl.col('ticker').is_in(tickers))
             df.write_parquet(output_path)
         except Exception as e:
