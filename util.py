@@ -23,7 +23,7 @@ def get_time_filtered_trades(date_str, start_time_str, end_time_str, columns=Non
 
 def add_bsp(df: pl.DataFrame):
     df = df.with_columns(
-        (((pl.col('ask_price') + pl.col('bid_price'))/2.0 - pl.col('price'))/((pl.col('ask_price') - pl.col('bid_price'))/2.0))
+        ((pl.col('price') - (pl.col('ask_price') + pl.col('bid_price'))/2.0 )/((pl.col('ask_price') - pl.col('bid_price'))/2.0))
         .alias('bsp')
     )
     df = df.with_columns(pl.col('bsp').fill_nan(0).fill_null(0))
