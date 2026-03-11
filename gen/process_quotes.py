@@ -4,133 +4,200 @@ import argparse
 
 DATA_PATH = "/Volumes/Extreme SSD/data"
 
-def load_data(date):
+def load_data(date, trades_path, quotes_path):
 
     trades = pl.scan_parquet(
-        f"{DATA_PATH}/trades/clean/{date}.parquet"
+        f"{trades_path}/{date}.parquet"
     )
 
     quotes = pl.scan_parquet(
-        f"{DATA_PATH}/quotes/clean/{date}.parquet"
+        f"{quotes_path}/{date}.parquet"
     )
+
 
     return trades, quotes
 
+
 def enrich_quotes(quotes):
 
-    q = quotes.sort(["ticker","participant_timestamp"])
+    q = quotes.with_columns(
 
-    prev = q.select(
-        pl.exclude("ticker").shift().name.prefix("prev_")
+        pl.col("bid_exchange").shift().over("ticker").alias("prev_bid_exchange"),
+        pl.col("ask_exchange").shift().over("ticker").alias("prev_ask_exchange"),
+
+        pl.col("bid_price").shift().over("ticker").alias("prev_bid_price"),
+        pl.col("ask_price").shift().over("ticker").alias("prev_ask_price"),
+
+        pl.col("bid_size").shift().over("ticker").alias("prev_bid_size"),
+        pl.col("ask_size").shift().over("ticker").alias("prev_ask_size"),
     )
 
-    q = pl.concat([q, prev], how="horizontal")
-
     same_price = (
-        (pl.col("ask_price")==pl.col("prev_ask_price")) &
-        (pl.col("bid_price")==pl.col("prev_bid_price"))
+        (pl.col("ask_price") == pl.col("prev_ask_price")) &
+        (pl.col("bid_price") == pl.col("prev_bid_price"))
+    )
+
+    tick_type_expr = (
+
+        pl.when(
+            (pl.col("bid_exchange") != pl.col("prev_bid_exchange")) &
+            (pl.col("ask_exchange") == pl.col("prev_ask_exchange"))
+        ).then(pl.lit("bid_ex_change"))
+
+        .when(
+            (pl.col("bid_exchange") == pl.col("prev_bid_exchange")) &
+            (pl.col("ask_exchange") != pl.col("prev_ask_exchange"))
+        ).then(pl.lit("ask_ex_change"))
+
+        .when(
+            (pl.col("bid_exchange") != pl.col("prev_bid_exchange")) &
+            (pl.col("ask_exchange") != pl.col("prev_ask_exchange"))
+        ).then(pl.lit("bid_ask_ex_change"))
+
+        .when(same_price & (pl.col("bid_size") > pl.col("prev_bid_size")))
+        .then(pl.lit("bid_size_up"))
+
+        .when(same_price & (pl.col("bid_size") < pl.col("prev_bid_size")))
+        .then(pl.lit("bid_size_down"))
+
+        .when(same_price & (pl.col("ask_size") > pl.col("prev_ask_size")))
+        .then(pl.lit("ask_size_up"))
+
+        .when(same_price & (pl.col("ask_size") < pl.col("prev_ask_size")))
+        .then(pl.lit("ask_size_down"))
+
+        .when(
+            (pl.col("ask_price") > pl.col("prev_ask_price")) &
+            (pl.col("bid_price") == pl.col("prev_bid_price"))
+        ).then(pl.lit("ask_up"))
+
+        .when(
+            (pl.col("ask_price") < pl.col("prev_ask_price")) &
+            (pl.col("bid_price") == pl.col("prev_bid_price"))
+        ).then(pl.lit("ask_down"))
+
+        .when(
+            (pl.col("ask_price") == pl.col("prev_ask_price")) &
+            (pl.col("bid_price") > pl.col("prev_bid_price"))
+        ).then(pl.lit("bid_up"))
+
+        .when(
+            (pl.col("ask_price") == pl.col("prev_ask_price")) &
+            (pl.col("bid_price") < pl.col("prev_bid_price"))
+        ).then(pl.lit("bid_down"))
+
+        .when(
+            (pl.col("ask_price") > pl.col("prev_ask_price")) &
+            (pl.col("bid_price") > pl.col("prev_bid_price"))
+        ).then(pl.lit("two_sided_price_up"))
+
+        .when(
+            (pl.col("ask_price") < pl.col("prev_ask_price")) &
+            (pl.col("bid_price") < pl.col("prev_bid_price"))
+        ).then(pl.lit("two_sided_price_down"))
+
+        .when(
+            (pl.col("ask_price") > pl.col("prev_ask_price")) &
+            (pl.col("bid_price") < pl.col("prev_bid_price"))
+        ).then(pl.lit("two_sided_spread_up"))
+
+        .when(
+            (pl.col("ask_price") < pl.col("prev_ask_price")) &
+            (pl.col("bid_price") > pl.col("prev_bid_price"))
+        ).then(pl.lit("two_sided_spread_down"))
+
+        .otherwise(None)
     )
 
     q = q.with_columns(
-
-        pl.when(
-            (pl.col("bid_exchange")!=pl.col("prev_bid_exchange")) &
-            (pl.col("ask_exchange")==pl.col("prev_ask_exchange"))
-        ).then("bid_ex_change")
-
-        .when(
-            (pl.col("bid_exchange")==pl.col("prev_bid_exchange")) &
-            (pl.col("ask_exchange")!=pl.col("prev_ask_exchange"))
-        ).then("ask_ex_change")
-
-        .when(
-            (pl.col("bid_exchange")!=pl.col("prev_bid_exchange")) &
-            (pl.col("ask_exchange")!=pl.col("prev_ask_exchange"))
-        ).then("bid_ask_ex_change")
-
-        .when(same_price & (pl.col("bid_size") > pl.col("prev_bid_size")))
-        .then("bid_size_up")
-
-        .when(same_price & (pl.col("bid_size") < pl.col("prev_bid_size")))
-        .then("bid_size_down")
-
-        .otherwise(None)
-
-        .alias("tick_type")
+        tick_type_expr.alias("tick_type")
     )
+
 
     return q
 
+
 def build_dataset(trades, quotes):
 
-    trades = trades.sort(["ticker","participant_timestamp"])
-    quotes = quotes.sort(["ticker","participant_timestamp"])
+    frame = (
+        quotes
 
-    prev_quote = trades.join_asof(
-        quotes,
-        left_on="participant_timestamp",
-        right_on="participant_timestamp",
-        by="ticker",
-        strategy="backward"
+        # previous trade + last trade price
+        .join_asof(
+            trades.select(
+                "ticker",
+                pl.col("participant_timestamp").alias("trade_timestamp_prev"),
+                pl.col("price").alias("last_trade_price"),
+            ),
+            left_on="participant_timestamp",
+            right_on="trade_timestamp_prev",
+            by="ticker",
+            strategy="backward",
+        )
+
+        # next trade
+        .join_asof(
+            trades.select(
+                "ticker",
+                pl.col("participant_timestamp").alias("trade_timestamp_next"),
+            ),
+            left_on="participant_timestamp",
+            right_on="trade_timestamp_next",
+            by="ticker",
+            strategy="forward",
+        )
     )
 
-    next_quote = trades.join_asof(
-        quotes,
-        left_on="participant_timestamp",
-        right_on="participant_timestamp",
-        by="ticker",
-        strategy="forward",
-        suffix="_next"
+    frame = frame.select(
+        'ticker',
+        'participant_timestamp',
+        'tick_type',
+        'trade_timestamp_prev',
+        'last_trade_price',
+        'trade_timestamp_next'
     )
 
-    trades = prev_quote.join(
-        next_quote.select(
-            "ticker",
-            "participant_timestamp",
-            pl.col("participant_timestamp_next")
-        ),
-        on=["ticker","participant_timestamp"]
-    )
+    tick_enum = pl.Enum([
+        "bid_ex_change",
+        "ask_ex_change",
+        "bid_ask_ex_change",
+        "bid_size_up",
+        "bid_size_down",
+        "ask_size_up",
+        "ask_size_down",
+        "ask_up",
+        "ask_down",
+        "bid_up",
+        "bid_down",
+        "two_sided_price_up",
+        "two_sided_price_down",
+        "two_sided_spread_up",
+        "two_sided_spread_down",
+    ])
 
-    trades = trades.with_columns(
-
-        (
-            pl.col("participant_timestamp")
-            - pl.col("participant_timestamp_right")
-        ).alias("t_from_prev_quote"),
-
-        (
-            pl.col("participant_timestamp_next")
-            - pl.col("participant_timestamp")
-        ).alias("t_to_next_quote")
-    )
-
-    return trades
-
-def trade_signing(frame):
-
-    mid = (pl.col("ask_price")+pl.col("bid_price"))/2
-    spread = (pl.col("ask_price")-pl.col("bid_price"))/2
-
-    return frame.with_columns(
-        ((pl.col("price")-mid)/spread).alias("bsp")
-    )
+    frame = frame.with_columns(pl.col("tick_type").cast(tick_enum))
 
 
-def process_day(date, tickers):
+    return frame
 
-    trades, quotes = load_data(date)
+
+
+def process_day(date, tickers, trades_path, quotes_path):
+
+    trades, quotes = load_data(date, quotes_path=quotes_path, trades_path=trades_path)
 
     trades = trades.filter(pl.col("ticker").is_in(tickers))
     quotes = quotes.filter(pl.col("ticker").is_in(tickers))
+
+    trades = trades.with_columns(pl.lit(True).alias("is_trade"))
+    quotes = quotes.with_columns(pl.lit(False).alias("is_trade"))
 
     quotes = enrich_quotes(quotes)
 
     frame = build_dataset(trades, quotes)
 
-    frame = trade_signing(frame)
 
-    return frame.collect(streaming=True)
+    return frame.collect(engine="streaming")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Onboard Trades")
@@ -139,12 +206,15 @@ if __name__ == "__main__":
     parser.add_argument("--quote_data_dir", type=str)
     parser.add_argument("--trade_data_dir", type=str)
     parser.add_argument("--universe_path", type=str)
+    parser.add_argument("--output_dir", type=str)
 
     args = parser.parse_args()
 
     date_range = pd.bdate_range(args.start_date, args.end_date)
 
-    univ = pl.read_parquet(f"{DATA_PATH}/universe.parquet")
+    DATA_PATH = args.universe_path
+
+    univ = pl.read_parquet(f"{args.universe_path}/universe.parquet")
 
     for date in date_range:
         tickers = (
@@ -156,8 +226,13 @@ if __name__ == "__main__":
             .implode()
         )
 
-        df = process_day(date.strftime("%Y%m%d"), tickers)
+        df = process_day(
+            date=date.strftime("%Y%m%d"),
+            tickers=tickers,
+            trades_path=args.trade_data_dir,
+            quotes_path=args.quote_data_dir
+        )
 
         df.write_parquet(
-            f"{DATA_PATH}/trades_and_quotes/{date.strftime('%Y%m%d')}.parquet"
+            f"{args.output_dir}/{date.strftime('%Y%m%d')}.parquet"
         )
