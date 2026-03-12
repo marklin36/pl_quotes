@@ -23,13 +23,10 @@ def load_data(date, trades_path, quotes_path):
 def enrich_quotes(quotes):
 
     q = quotes.with_columns(
-
         pl.col("bid_exchange").shift().over("ticker").alias("prev_bid_exchange"),
         pl.col("ask_exchange").shift().over("ticker").alias("prev_ask_exchange"),
-
         pl.col("bid_price").shift().over("ticker").alias("prev_bid_price"),
         pl.col("ask_price").shift().over("ticker").alias("prev_ask_price"),
-
         pl.col("bid_size").shift().over("ticker").alias("prev_bid_size"),
         pl.col("ask_size").shift().over("ticker").alias("prev_ask_size"),
     )
@@ -41,72 +38,74 @@ def enrich_quotes(quotes):
 
     tick_type_expr = (
 
+        # ---- reversed order (last pandas rule first) ----
+
         pl.when(
+            (pl.col("ask_price") < pl.col("prev_ask_price")) &
+            (pl.col("bid_price") > pl.col("prev_bid_price"))
+        ).then("two_sided_spread_down")
+
+        .when(
+            (pl.col("ask_price") > pl.col("prev_ask_price")) &
+            (pl.col("bid_price") < pl.col("prev_bid_price"))
+        ).then("two_sided_spread_up")
+
+        .when(
+            (pl.col("ask_price") < pl.col("prev_ask_price")) &
+            (pl.col("bid_price") < pl.col("prev_bid_price"))
+        ).then("two_sided_price_down")
+
+        .when(
+            (pl.col("ask_price") > pl.col("prev_ask_price")) &
+            (pl.col("bid_price") > pl.col("prev_bid_price"))
+        ).then("two_sided_price_up")
+
+        .when(
+            (pl.col("ask_price") == pl.col("prev_ask_price")) &
+            (pl.col("bid_price") < pl.col("prev_bid_price"))
+        ).then("bid_down")
+
+        .when(
+            (pl.col("ask_price") == pl.col("prev_ask_price")) &
+            (pl.col("bid_price") > pl.col("prev_bid_price"))
+        ).then("bid_up")
+
+        .when(
+            (pl.col("ask_price") < pl.col("prev_ask_price")) &
+            (pl.col("bid_price") == pl.col("prev_bid_price"))
+        ).then("ask_down")
+
+        .when(
+            (pl.col("ask_price") > pl.col("prev_ask_price")) &
+            (pl.col("bid_price") == pl.col("prev_bid_price"))
+        ).then("ask_up")
+
+        .when(same_price & (pl.col("ask_size") < pl.col("prev_ask_size")))
+        .then("ask_size_down")
+
+        .when(same_price & (pl.col("ask_size") > pl.col("prev_ask_size")))
+        .then("ask_size_up")
+
+        .when(same_price & (pl.col("bid_size") < pl.col("prev_bid_size")))
+        .then("bid_size_down")
+
+        .when(same_price & (pl.col("bid_size") > pl.col("prev_bid_size")))
+        .then("bid_size_up")
+
+        .when(
             (pl.col("bid_exchange") != pl.col("prev_bid_exchange")) &
-            (pl.col("ask_exchange") == pl.col("prev_ask_exchange"))
-        ).then(pl.lit("bid_ex_change"))
+            (pl.col("ask_exchange") != pl.col("prev_ask_exchange"))
+        ).then("bid_ask_ex_change")
 
         .when(
             (pl.col("bid_exchange") == pl.col("prev_bid_exchange")) &
             (pl.col("ask_exchange") != pl.col("prev_ask_exchange"))
-        ).then(pl.lit("ask_ex_change"))
+        ).then("ask_ex_change")
 
         .when(
             (pl.col("bid_exchange") != pl.col("prev_bid_exchange")) &
-            (pl.col("ask_exchange") != pl.col("prev_ask_exchange"))
-        ).then(pl.lit("bid_ask_ex_change"))
-
-        .when(same_price & (pl.col("bid_size") > pl.col("prev_bid_size")))
-        .then(pl.lit("bid_size_up"))
-
-        .when(same_price & (pl.col("bid_size") < pl.col("prev_bid_size")))
-        .then(pl.lit("bid_size_down"))
-
-        .when(same_price & (pl.col("ask_size") > pl.col("prev_ask_size")))
-        .then(pl.lit("ask_size_up"))
-
-        .when(same_price & (pl.col("ask_size") < pl.col("prev_ask_size")))
-        .then(pl.lit("ask_size_down"))
-
-        .when(
-            (pl.col("ask_price") > pl.col("prev_ask_price")) &
-            (pl.col("bid_price") == pl.col("prev_bid_price"))
-        ).then(pl.lit("ask_up"))
-
-        .when(
-            (pl.col("ask_price") < pl.col("prev_ask_price")) &
-            (pl.col("bid_price") == pl.col("prev_bid_price"))
-        ).then(pl.lit("ask_down"))
-
-        .when(
-            (pl.col("ask_price") == pl.col("prev_ask_price")) &
-            (pl.col("bid_price") > pl.col("prev_bid_price"))
-        ).then(pl.lit("bid_up"))
-
-        .when(
-            (pl.col("ask_price") == pl.col("prev_ask_price")) &
-            (pl.col("bid_price") < pl.col("prev_bid_price"))
-        ).then(pl.lit("bid_down"))
-
-        .when(
-            (pl.col("ask_price") > pl.col("prev_ask_price")) &
-            (pl.col("bid_price") > pl.col("prev_bid_price"))
-        ).then(pl.lit("two_sided_price_up"))
-
-        .when(
-            (pl.col("ask_price") < pl.col("prev_ask_price")) &
-            (pl.col("bid_price") < pl.col("prev_bid_price"))
-        ).then(pl.lit("two_sided_price_down"))
-
-        .when(
-            (pl.col("ask_price") > pl.col("prev_ask_price")) &
-            (pl.col("bid_price") < pl.col("prev_bid_price"))
-        ).then(pl.lit("two_sided_spread_up"))
-
-        .when(
-            (pl.col("ask_price") < pl.col("prev_ask_price")) &
-            (pl.col("bid_price") > pl.col("prev_bid_price"))
-        ).then(pl.lit("two_sided_spread_down"))
+            (pl.col("ask_exchange") == pl.col("prev_ask_exchange"))
+        ).then("bid_ex_change")
 
         .otherwise(None)
     )
@@ -115,9 +114,7 @@ def enrich_quotes(quotes):
         tick_type_expr.alias("tick_type")
     )
 
-
     return q
-
 
 def build_dataset(trades, quotes):
 
