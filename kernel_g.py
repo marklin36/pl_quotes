@@ -122,7 +122,90 @@ def get_z_score_general(d: pl.DataFrame, upper_count:int=5, n_periods:int=50, qu
 
     return x
 
-def process_date(date, start_time:str, end_time:str, shift_ns:int, grid_ns:int, n_periods:int, upper_count:int, shuffle='decisecond', filters=None, quantile_clip=False):
+
+def get_z_score_with_extra_cols(d: pl.DataFrame, upper_count:int=5, n_periods:int=50) -> pl.DataFrame:
+    """
+    This function computes z-score for each ticker and period corresponding to testing a hypothesis that
+    bsp is the same in the kernel and outside of the kernel. The output frame contains z-score for every
+    ticker and for every period.
+    """
+
+    kernel = d.group_by(['ticker', 'grid']).agg([
+        pl.col("bsp").count().alias("dec_count"),
+        pl.col("bsp").mean().alias("dec_mean")
+    ])
+    # recreate grid mode 50
+    kernel = kernel.with_columns((pl.col("grid") % n_periods).alias("grid_mod_n"))
+
+
+    # quantile clip is also compatible with an absolute clip
+    kernel = kernel.with_columns(
+        pl.col("dec_count").clip(upper_bound=upper_count).alias("dec_count_clipped")
+    )
+
+    kernel = kernel.with_columns((pl.col("dec_mean") * pl.col("dec_count_clipped")).alias("bsp_weighted"))
+    kernel = kernel.with_columns((pl.col("dec_mean") * pl.col("dec_count")).alias("not_clipped_bsp_weighted"))
+
+
+    # now we only group by ticker, and period_col (decisecond_mod_5)
+    kernel = kernel.group_by(['ticker', 'grid_mod_n']).agg([
+        pl.col("dec_count_clipped").sum().alias("size"),
+        pl.col("bsp_weighted").sum().alias("bsp_weighted_sum"),
+        pl.col("not_clipped_bsp_weighted").sum().alias("not_clipped_bsp_weighted_sum"),
+        pl.col("dec_count").sum().alias("total_dec_count")
+    ])
+
+    kernel = kernel.with_columns((kernel['bsp_weighted_sum']/kernel['size']).alias("mean"))
+    kernel = kernel.with_columns((kernel['not_clipped_bsp_weighted_sum']/kernel['total_dec_count']).alias("true_mean"))
+
+
+    # it is important to compute the prior mean in the same way as for the kernel
+    prior = d.group_by(["ticker", "grid"]).agg([
+        pl.col("bsp").count().alias("prior_dec_count"),
+        pl.col("bsp").mean().alias("prio_dec_mean")
+    ])
+
+    prior = prior.with_columns(
+        pl.col("prior_dec_count").clip(upper_bound=upper_count).alias("prior_dec_count_clipped")
+    )
+
+    prior = prior.with_columns(
+        (pl.col("prio_dec_mean") * pl.col("prior_dec_count_clipped")).alias("prior_bsp_weighted"),
+    )
+    prior = prior.with_columns(
+        (pl.col("prio_dec_mean") * pl.col("prior_dec_count")).alias("not_clipped_prior_bsp_weighted")
+    )
+
+    prior = prior.group_by(['ticker']).agg([
+        pl.col("prior_dec_count_clipped").sum().alias("prior_size"),
+        pl.col("prior_bsp_weighted").sum().alias("prior_sp_weighted_sum"),
+        pl.col("not_clipped_prior_bsp_weighted").sum().alias("not_clipped_prior_bsp_weighted_sum"),
+        pl.col("prior_dec_count").sum().alias("prior_total_dec_count")
+    ])
+    prior = prior.with_columns((prior['prior_sp_weighted_sum']/prior['prior_size']).alias("prior_bsp_mean"))
+    prior = prior.with_columns((prior['not_clipped_prior_bsp_weighted_sum']/prior['prior_total_dec_count']).alias("true_prior_bsp_mean"))
+
+    #x = kernel.join(prior, on='ticker', how='left')
+    x = pl.concat([kernel, prior], how='align')
+
+    x = x.with_columns(
+        ((pl.col('mean')+1)/2.0).alias('binary_mean'),
+        ((pl.col('prior_bsp_mean')+1)/2.0).alias('binary_prior_bsp_mean'),
+    )
+
+    num = (pl.col("binary_prior_bsp_mean") * (1 - pl.col("binary_prior_bsp_mean")) / pl.col("size")).sqrt()
+    z   = (pl.col("binary_mean") - pl.col("binary_prior_bsp_mean")) / num
+
+    x = x.with_columns([
+        num.alias("numerator"),
+        z.alias("z_score"),
+        z.abs().alias("z_score_abs"),
+    ])
+
+    return x
+
+
+def process_date(date, start_time:str, end_time:str, shift_ns:int, grid_ns:int, n_periods:int, upper_count:int, shuffle='decisecond', filters=None, quantile_clip=False, add_extra_cols=False):
     d = util.get_time_filtered_trades(
         date_str = date.strftime('%Y%m%d'),
         start_time_str=start_time,
@@ -143,7 +226,11 @@ def process_date(date, start_time:str, end_time:str, shift_ns:int, grid_ns:int, 
     for i in range(0, n_shifts):
         # prepare frame doesn't modify inputs
         df_local = prepare_frame_general(df=d, i=i, shift_ns=shift_ns, grid_ns=grid_ns, n_periods=n_periods)
-        r = get_z_score_general(d=df_local, upper_count=upper_count, n_periods=n_periods, quantile_clip=quantile_clip)
+        if add_extra_cols:
+            # we don't need to add extra columns for the random version
+            r = get_z_score_with_extra_cols(df_local, upper_count=upper_count, n_periods=n_periods)
+        else:
+            r = get_z_score_general(d=df_local, upper_count=upper_count, n_periods=n_periods, quantile_clip=quantile_clip)
         r = r.with_columns(pl.lit(i).alias('shift'))
         r = r.with_columns(
             pl.concat_str([
