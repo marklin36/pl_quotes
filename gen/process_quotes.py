@@ -43,69 +43,69 @@ def enrich_quotes(quotes):
         pl.when(
             (pl.col("ask_price") < pl.col("prev_ask_price")) &
             (pl.col("bid_price") > pl.col("prev_bid_price"))
-        ).then("two_sided_spread_down")
+        ).then(pl.lit("two_sided_spread_down"))
 
         .when(
             (pl.col("ask_price") > pl.col("prev_ask_price")) &
             (pl.col("bid_price") < pl.col("prev_bid_price"))
-        ).then("two_sided_spread_up")
+        ).then(pl.lit("two_sided_spread_up"))
 
         .when(
             (pl.col("ask_price") < pl.col("prev_ask_price")) &
             (pl.col("bid_price") < pl.col("prev_bid_price"))
-        ).then("two_sided_price_down")
+        ).then(pl.lit("two_sided_price_down"))
 
         .when(
             (pl.col("ask_price") > pl.col("prev_ask_price")) &
             (pl.col("bid_price") > pl.col("prev_bid_price"))
-        ).then("two_sided_price_up")
+        ).then(pl.lit("two_sided_price_up"))
 
         .when(
             (pl.col("ask_price") == pl.col("prev_ask_price")) &
             (pl.col("bid_price") < pl.col("prev_bid_price"))
-        ).then("bid_down")
+        ).then(pl.lit("bid_down"))
 
         .when(
             (pl.col("ask_price") == pl.col("prev_ask_price")) &
             (pl.col("bid_price") > pl.col("prev_bid_price"))
-        ).then("bid_up")
+        ).then(pl.lit("bid_up"))
 
         .when(
             (pl.col("ask_price") < pl.col("prev_ask_price")) &
             (pl.col("bid_price") == pl.col("prev_bid_price"))
-        ).then("ask_down")
+        ).then(pl.lit("ask_down"))
 
         .when(
             (pl.col("ask_price") > pl.col("prev_ask_price")) &
             (pl.col("bid_price") == pl.col("prev_bid_price"))
-        ).then("ask_up")
+        ).then(pl.lit("ask_up"))
 
         .when(same_price & (pl.col("ask_size") < pl.col("prev_ask_size")))
-        .then("ask_size_down")
+        .then(pl.lit("ask_size_down"))
 
         .when(same_price & (pl.col("ask_size") > pl.col("prev_ask_size")))
-        .then("ask_size_up")
+        .then(pl.lit("ask_size_up"))
 
         .when(same_price & (pl.col("bid_size") < pl.col("prev_bid_size")))
-        .then("bid_size_down")
+        .then(pl.lit("bid_size_down"))
 
         .when(same_price & (pl.col("bid_size") > pl.col("prev_bid_size")))
-        .then("bid_size_up")
+        .then(pl.lit("bid_size_up"))
 
         .when(
             (pl.col("bid_exchange") != pl.col("prev_bid_exchange")) &
             (pl.col("ask_exchange") != pl.col("prev_ask_exchange"))
-        ).then("bid_ask_ex_change")
+        ).then(pl.lit("bid_ask_ex_change"))
 
         .when(
             (pl.col("bid_exchange") == pl.col("prev_bid_exchange")) &
             (pl.col("ask_exchange") != pl.col("prev_ask_exchange"))
-        ).then("ask_ex_change")
+        ).then(pl.lit("ask_ex_change"))
 
         .when(
             (pl.col("bid_exchange") != pl.col("prev_bid_exchange")) &
             (pl.col("ask_exchange") == pl.col("prev_ask_exchange"))
-        ).then("bid_ex_change")
+        ).then(pl.lit("bid_ex_change"))
 
         .otherwise(None)
     )
