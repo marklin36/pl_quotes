@@ -1,6 +1,7 @@
 import polars as pl
 import pandas as pd
 import argparse
+from tqdm import tqdm
 
 DATA_PATH = "/Volumes/Extreme SSD/data"
 
@@ -216,7 +217,7 @@ if __name__ == "__main__":
 
     univ = pl.read_parquet(f"{args.universe_path}/universe.parquet")
 
-    for date in date_range:
+    for date in tqdm(date_range):
         tickers = (
             univ
             .filter(pl.col("date") == date)
