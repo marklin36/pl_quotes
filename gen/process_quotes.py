@@ -2,6 +2,7 @@ import polars as pl
 import pandas as pd
 import argparse
 from tqdm import tqdm
+from pathlib import Path
 
 DATA_PATH = "/Volumes/Extreme SSD/data"
 
@@ -227,8 +228,11 @@ if __name__ == "__main__":
             .implode()
         )
 
-        trade_input_path = args.trade_data_dir / f"{date.strftime('%Y%m%d')}.parquet"
-        quotes_output_path = args.quote_data_dir / f"{date.strftime('%Y%m%d')}.parquet"
+        trades_dir = Path(args.trade_data_dir)
+        quotes_dir = Path(args.quote_data_dir)
+
+        trade_input_path = trades_dir / f"{date.strftime('%Y%m%d')}.parquet"
+        quotes_output_path = quotes_dir / f"{date.strftime('%Y%m%d')}.parquet"
 
         if not trade_input_path.exists() or not quotes_output_path.exists():
             print(f"File {date.strftime('%Y%m%d')} not found.")
