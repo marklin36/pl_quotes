@@ -5,7 +5,9 @@ import polars as pl
 import pytz
 import numpy as np
 
-def get_time_filtered_trades(date_str, start_time_str, end_time_str, columns=None):
+def get_time_filtered_trades(date_str, start_time_str, end_time_str, columns=None, path=None):
+    if path is None:
+        path = "/Volumes/T7/data/trades/signed"
     start = datetime.strptime(f"{date_str} {start_time_str}", '%Y%m%d %H:%M:%S')
     end = datetime.strptime(f"{date_str} {end_time_str}", '%Y%m%d %H:%M:%S')
     tz = pytz.timezone('America/New_York')
@@ -14,12 +16,31 @@ def get_time_filtered_trades(date_str, start_time_str, end_time_str, columns=Non
     if columns is None:
         columns = ["ticker", "participant_timestamp", "price", "ask_price", "bid_price", "exchange"]
     df = (
-        pl.scan_parquet(f"/Volumes/T7/data/trades/signed/{date_str}.parquet")
+        pl.scan_parquet(f"{path}/{date_str}.parquet")
           .filter(pl.col("participant_timestamp").is_between(start, end))
           .select(columns)
           .collect()
     )
     return df
+
+def get_time_filtered_quotes(date_str, start_time_str, end_time_str, columns=None, path=None):
+    if path is None:
+        path = "/home/kolaszewski/data/quotes/processed"
+    start = datetime.strptime(f"{date_str} {start_time_str}", '%Y%m%d %H:%M:%S')
+    end = datetime.strptime(f"{date_str} {end_time_str}", '%Y%m%d %H:%M:%S')
+    tz = pytz.timezone('America/New_York')
+    start = pd.to_datetime(tz.localize(start)).value
+    end = pd.to_datetime(tz.localize(end)).value
+    if columns is None:
+        columns = ["ticker", "participant_timestamp", "tick_type"]
+    df = (
+        pl.scan_parquet(f"{path}/{date_str}.parquet")
+          .filter(pl.col("participant_timestamp").is_between(start, end))
+          .select(columns)
+          .collect()
+    )
+    return df
+
 
 def add_bsp(df: pl.DataFrame):
     df = df.with_columns(
