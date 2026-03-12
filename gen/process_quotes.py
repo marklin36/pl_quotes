@@ -227,6 +227,13 @@ if __name__ == "__main__":
             .implode()
         )
 
+        trade_input_path = args.trade_data_dir / f"{date.strftime('%Y%m%d')}.parquet"
+        quotes_output_path = args.quote_data_dir / f"{date.strftime('%Y%m%d')}.parquet"
+
+        if not trade_input_path.exists() or not quotes_output_path.exists():
+            print(f"File {date.strftime('%Y%m%d')} not found.")
+            continue
+
         df = process_day(
             date=date.strftime("%Y%m%d"),
             tickers=tickers,
