@@ -20,13 +20,13 @@ def kernel_stats_pl(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-def prepare_frame_general(df: pl.DataFrame, i: int, shift_ns: int, grid_ns: int, n_periods: int) -> pl.DataFrame:
+def prepare_frame_general(d: pl.DataFrame, i: int, shift_ns: int, grid_ns: int, n_periods: int) -> pl.DataFrame:
     """
     This function creates a new fixed grid by shifting the timestamp and OVERWRITING it.
     """
-    d = df.clone()
+    # d = df.clone()
     d = d.with_columns(
-        (pl.col('participant_timestamp') + (i * shift_ns)).alias('participant_timestamp'),
+        (pl.col('true_participant_timestamp') + (i * shift_ns)).alias('participant_timestamp'),
     )
     d = d.with_columns(
         (pl.col('participant_timestamp') // grid_ns).alias('grid')
@@ -246,11 +246,13 @@ def process_date(date, start_time: str, end_time: str, shift_ns: int, grid_ns: i
     n_shifts = grid_ns // shift_ns
     assert grid_ns % shift_ns == 0, f"grid_ns={grid_ns} should be divisible by shift_ns={shift_ns}"
 
+    # add true timestamp that will never be changed
+    d = d.with_columns(pl.col('participant_timestamp').alias('true_participant_timestamp'))
 
     results = []
     for i in range(0, n_shifts):
         # prepare frame doesn't modify inputs
-        df_local = prepare_frame_general(df=d, i=i, shift_ns=shift_ns, grid_ns=grid_ns, n_periods=n_periods)
+        df_local = prepare_frame_general(d=d, i=i, shift_ns=shift_ns, grid_ns=grid_ns, n_periods=n_periods)
         if add_extra_cols:
             # we don't need to add extra columns for the random version
             r = get_z_score_with_extra_cols(df_local, upper_count=upper_count, n_periods=n_periods)
@@ -287,7 +289,7 @@ def process_date(date, start_time: str, end_time: str, shift_ns: int, grid_ns: i
 
         # define new grid
         # preparing the frame MUST BE AFTER SHUFFLING, NOT BEFORE - I disagree
-        df_local = prepare_frame_general(df=df_local, i=i, shift_ns=shift_ns, grid_ns=grid_ns, n_periods=n_periods)
+        df_local = prepare_frame_general(d=df_local, i=i, shift_ns=shift_ns, grid_ns=grid_ns, n_periods=n_periods)
 
         r = get_z_score_general(d=df_local, upper_count=upper_count, n_periods=n_periods, quantile_clip=quantile_clip)
         r = r.with_columns(pl.lit(i).alias('shift'))
