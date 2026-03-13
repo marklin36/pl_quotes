@@ -277,6 +277,10 @@ def process_date(date, start_time: str, end_time: str, shift_ns: int, grid_ns: i
     for i in range(0, n_shifts):
         # prepare frame doesn't modify the input
         df_local = d_r.clone()
+
+        # defining the new grid should be before shuffling
+        df_local = prepare_frame_general(df=df_local, i=i, shift_ns=shift_ns, grid_ns=grid_ns, n_periods=n_periods)
+
         # we do shuffling after defining a new grid but both options are reasonable
         if shuffle == 'second':
             df_local = util.add_block_shuffled_time(df_local, block=1000_000_000)
@@ -287,7 +291,7 @@ def process_date(date, start_time: str, end_time: str, shift_ns: int, grid_ns: i
 
         # define new grid
         # preparing the frame MUST BE AFTER SHUFFLING, NOT BEFORE - I disagree
-        df_local = prepare_frame_general(df=df_local, i=i, shift_ns=shift_ns, grid_ns=grid_ns, n_periods=n_periods)
+        #df_local = prepare_frame_general(df=df_local, i=i, shift_ns=shift_ns, grid_ns=grid_ns, n_periods=n_periods)
 
         r = get_z_score_general(d=df_local, upper_count=upper_count, n_periods=n_periods, quantile_clip=quantile_clip)
         r = r.with_columns(pl.lit(i).alias('shift'))
