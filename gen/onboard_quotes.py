@@ -50,7 +50,7 @@ if __name__ == "__main__":
         print(f"Downloading file '{object_key}")
 
         local_file_name = object_key.split('/')[-1].replace('-', '')  # e.g., '2025-06-12.csv.gz'
-        local_file_path = DATA_PATH + "/data/quotes/raw/" + local_file_name
+        local_file_path = args.data_path + "/data/quotes/raw/" + local_file_name
         print(local_file_path)
 
         # Download the file
