@@ -59,7 +59,6 @@ if __name__ == "__main__":
                     null_values=["", " ", "NA"],
                 )
                 .with_columns([
-                    pl.col("ask_exchange").cast(pl.Int8, strict=False),
                     pl.col("price").cast(pl.Float32, strict=False),
                     pl.col("size").cast(pl.Int32, strict=False),
                     pl.col("exchange").cast(pl.Int8, strict=False),
@@ -68,6 +67,7 @@ if __name__ == "__main__":
                     pl.col("sip_timestamp").cast(pl.Int64, strict=False),
                     pl.col("tape").cast(pl.Int8, strict=False),
                     pl.col("trf_timestamp").cast(pl.Int64, strict=False),
+                    pl.col("trf_id").cast(pl.Categorical, strict=False),
                 ])
             )
 
